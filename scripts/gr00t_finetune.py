@@ -46,7 +46,7 @@ class Config:
     """Data configuration name from DATA_CONFIG_MAP."""
 
     # Training parameters
-    batch_size: int = 16
+    batch_size: int = 4
     """Batch size per GPU for training."""
 
     max_steps: int = 10000
@@ -87,7 +87,7 @@ class Config:
     warmup_ratio: float = 0.05
     """Ratio of total training steps used for warmup."""
 
-    lora_rank: int = 0
+    lora_rank: int = 16
     """Rank for the LORA model."""
 
     lora_alpha: int = 16
@@ -161,7 +161,7 @@ def main(config: Config):
         run_name=None,
         remove_unused_columns=False,
         deepspeed="",
-        gradient_checkpointing=False,
+        gradient_checkpointing=True,
         bf16=True,
         tf32=True,
         per_device_train_batch_size=config.batch_size,
