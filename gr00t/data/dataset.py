@@ -59,10 +59,35 @@ def calculate_dataset_statistics(parquet_paths: list[Path]) -> dict:
     # Compute dataset statistics
     dataset_statistics = {}
     for le_modality in all_low_dim_data.columns:
+        # Skip non-numerical columns like video paths
+        if le_modality.startswith("videos/") or le_modality.startswith("observation.images."):
+            print(f"Skipping statistics for non-numerical modality: {le_modality}")
+            continue
+
         print(f"Computing statistics for {le_modality}...")
-        np_data = np.vstack(
-            [np.asarray(x, dtype=np.float32) for x in all_low_dim_data[le_modality]]
-        )
+        # Ensure data is numerical before converting to numpy array
+        try:
+            # Attempt to convert a sample to float to check if the column is numerical
+            # This is a more robust check than just string matching
+            if not all_low_dim_data[le_modality].empty and isinstance(all_low_dim_data[le_modality].iloc[0], str):
+                # If it's a string column, try converting a sample to float
+                # If it fails, it's likely not a numerical column
+                try:
+                    float(all_low_dim_data[le_modality].iloc[0])
+                except ValueError:
+                    print(f"Skipping statistics for non-numerical modality: {le_modality}")
+                    continue
+
+            np_data = np.vstack(
+                [np.asarray(x, dtype=np.float32) for x in all_low_dim_data[le_modality]]
+            )
+        except ValueError as e:
+            print(f"Could not convert {le_modality} to float, skipping statistics: {e}")
+            continue
+        except TypeError as e:
+            print(f"TypeError for {le_modality}, skipping statistics: {e}")
+            continue
+
         dataset_statistics[le_modality] = {
             "mean": np.mean(np_data, axis=0).tolist(),
             "std": np.std(np_data, axis=0).tolist(),
@@ -433,7 +458,12 @@ class LeRobotSingleDataset(Dataset):
         with open(tasks_path, "r") as f:
             tasks = [json.loads(line) for line in f]
         df = pd.DataFrame(tasks)
-        return df.set_index("task_index")
+        if "task_index" in df.columns:
+            return df.set_index("task_index")
+        else:
+            # If 'task_index' is not present, return the DataFrame with its default integer index
+            print(f"Warning: 'task_index' not found in {tasks_path}. Returning DataFrame without setting 'task_index' as index.")
+            return df
 
     def _check_integrity(self):
         """Use the config to check if the keys are valid and detect silent data corruption."""

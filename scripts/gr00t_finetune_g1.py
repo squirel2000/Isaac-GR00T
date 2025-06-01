@@ -31,19 +31,27 @@ from gr00t.model.gr00t_n1 import GR00T_N1
 from gr00t.utils.peft import get_lora_model
 
 
+# =====================
+# Dataset Constants
+# =====================
+G1_DATASET_PATH = "demo_data/G1_testing_dataset"
+G1_OUTPUT_DIR = "output/G1_testing_dataset/"
+G1_DATA_CONFIG = "g1_cube_pick_and_place"
+
+
 @dataclass
 class Config:
-    """Configuration for GR00T model fine-tuning on G1 Block Stacking Dataset."""
+    """Configuration for GR00T model fine-tuning on G1 Cube Picking-and-Placement Dataset."""
 
     # Dataset parameters
-    dataset_path: str = "demo_data/G1_BlockStacking_Dataset"
-    """Path to the G1 Block Stacking Dataset directory."""
+    dataset_path: str = G1_DATASET_PATH
+    """Path to the G1 Cube Picking-and-Placement Dataset directory."""
 
-    output_dir: str = "output/G1_BlockStacking_Dataset/"
+    output_dir: str = G1_OUTPUT_DIR
     """Directory to save G1 model checkpoints."""
 
-    data_config: str = "g1_block_stacking"
-    """Data configuration name for G1 Block Stacking from DATA_CONFIG_MAP."""
+    data_config: str = G1_DATA_CONFIG
+    """Data configuration name for G1 Cube Picking-and-Placement from DATA_CONFIG_MAP."""
 
     # Training parameters
     batch_size: int = 4
@@ -210,7 +218,7 @@ if __name__ == "__main__":
 
     # Print the tyro config
     print("\n" + "=" * 50)
-    print("GR00T FINE-TUNING CONFIGURATION FOR G1 BLOCK STACKING:")
+    print("GR00T FINE-TUNING CONFIGURATION FOR G1 PICKING-AND-PLACING TASK:")
     print("=" * 50)
     for key, value in vars(config).items():
         print(f"{key}: {value}")
