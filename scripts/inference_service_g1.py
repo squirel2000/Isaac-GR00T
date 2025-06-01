@@ -26,21 +26,21 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_path",
         type=str,
-        help="Path to the model checkpoint directory.",
-        default="nvidia/GR00T-N1-2B",
+        help="Path to the model checkpoint directory. For G1 testing dataset (pick and place cube), this might be 'output/G1_testing_dataset/' or a base model like 'nvidia/GR00T-N1-2B'.",
+        default="output/G1_testing_dataset/", # Adjusted for G1 testing_dataset (pick and place cube)
     )
     parser.add_argument(
         "--embodiment_tag",
         type=str,
         help="The embodiment tag for the model.",
-        default="gr1",
+        default="new_embodiment", # Adjusted for G1 BlockStacking
     )
     parser.add_argument(
         "--data_config",
         type=str,
         help="The name of the data config to use.",
         choices=list(DATA_CONFIG_MAP.keys()),
-        default="gr1_arms_waist",
+        default="g1_cube_pick_and_place", # Adjusted for G1 testing_dataset (pick and place cube)
     )
 
     parser.add_argument("--port", type=int, help="Port number for the server.", default=5555)
@@ -94,27 +94,23 @@ if __name__ == "__main__":
         modality_configs = policy_client.get_modality_config()
         print(modality_configs.keys())
 
-        # Making prediction...
-        # - obs: video.ego_view: (1, 256, 256, 3)
-        # - obs: state.left_arm: (1, 7)
-        # - obs: state.right_arm: (1, 7)
-        # - obs: state.left_hand: (1, 6)
-        # - obs: state.right_hand: (1, 6)
-        # - obs: state.waist: (1, 3)
-
-        # - action: action.left_arm: (16, 7)
-        # - action: action.right_arm: (16, 7)
-        # - action: action.left_hand: (16, 6)
-        # - action: action.right_hand: (16, 6)
-        # - action: action.waist: (16, 3)
+        # Example observation for G1_BlockStacking_Dataset.
+        # The actual camera views and resolutions might vary based on your 'g1_block_stacking' data_config.
+        # The policy on the server side will handle necessary transforms (e.g., resizing).
+        # State dimensions should match your robot's configuration as per modality.json.
+        # For G1_BlockStacking_Dataset:
+        # - video keys: "video.cam_right_high", "video.cam_left_wrist", "video.cam_right_wrist"
+        # - state keys: "state.left_arm" (7), "state.right_arm" (7), "state.left_hand" (7), "state.right_hand" (7)
+        # - annotation key: "annotation.human.task_description"
         obs = {
-            "video.ego_view": np.random.randint(0, 256, (1, 256, 256, 3), dtype=np.uint8),
+            # Using 'video.cam_right_high' as an example. Shape is (batch, H, W, C)
+            "video.camera": np.random.randint(0, 256, (1, 480, 640, 3), dtype=np.uint8),
             "state.left_arm": np.random.rand(1, 7),
             "state.right_arm": np.random.rand(1, 7),
-            "state.left_hand": np.random.rand(1, 6),
-            "state.right_hand": np.random.rand(1, 6),
-            "state.waist": np.random.rand(1, 3),
-            "annotation.human.action.task_description": ["do your thing!"],
+            "state.left_hand": np.random.rand(1, 7),
+            "state.right_hand": np.random.rand(1, 7),
+            # Task description for G1_testing_dataset (pick and place cube)
+            "annotation.human.task_description": ["pick and place a cube"],
         }
 
         time_start = time.time()
