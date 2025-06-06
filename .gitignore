@@ -119,9 +119,6 @@ playground/
 .hydra/
 
 # Data
-demo_data/gr00t-gr1-apple-to-shelf/
-demo_data/so100_strawberry_grape/
-demo_data/G1_BlockStacking_Dataset/
-demo_data/G1_testing_dataset/
+demo_data/
 tmp/
 output/
