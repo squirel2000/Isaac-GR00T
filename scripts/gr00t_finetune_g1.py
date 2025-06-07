@@ -34,8 +34,8 @@ from gr00t.utils.peft import get_lora_model
 # =====================
 # Dataset Constants
 # =====================
-G1_DATASET_PATH = "demo_data/G1_testing_dataset"
-G1_OUTPUT_DIR = "output/G1_testing_dataset/"
+G1_DATASET_PATH = "demo_data/G1_CanSorting_Dataset"
+G1_OUTPUT_DIR = "output/G1_CanSorting_Dataset/"
 G1_DATA_CONFIG = "g1_cube_pick_and_place"
 
 
@@ -54,7 +54,7 @@ class Config:
     """Data configuration name for G1 Cube Picking-and-Placement from DATA_CONFIG_MAP."""
 
     # Training parameters
-    batch_size: int = 4
+    batch_size: int = 1
     """Batch size per GPU for training (adjusted for G1 dataset)."""
 
     max_steps: int = 100000
@@ -95,7 +95,7 @@ class Config:
     warmup_ratio: float = 0.05
     """Ratio of total training steps used for warmup."""
 
-    lora_rank: int = 16
+    lora_rank: int = 8
     """Rank for the LORA model."""
 
     lora_alpha: int = 16
@@ -218,7 +218,7 @@ if __name__ == "__main__":
 
     # Print the tyro config
     print("\n" + "=" * 50)
-    print("GR00T FINE-TUNING CONFIGURATION FOR G1 PICKING-AND-PLACING TASK:")
+    print("GR00T FINE-TUNING CONFIGURATION FOR G1 PICKING-AND-SORTING A CAN:")
     print("=" * 50)
     for key, value in vars(config).items():
         print(f"{key}: {value}")

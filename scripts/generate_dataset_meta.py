@@ -29,29 +29,39 @@ def get_video_metadata(video_path: Path):
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
     
-    # Basic validation
+    # Store original values for more informative warnings
+    original_fps, original_width, original_height = fps, width, height
+
+    # Validate frame_count first, as this determines if the video is usable for an episode
     if frame_count <= 0:
-        print(f"Warning: Video {video_path} reported {frame_count} frames. Treating as invalid.", file=sys.stderr)
-        return fps, 0, width, height # Return 0 frames but other info if available
-    if fps <= 0:
-        print(f"Warning: Video {video_path} reported {fps} FPS. This might be unreliable.", file=sys.stderr)
-        # Allow processing but FPS might be unreliable if not overridden
+        print(f"Warning: Video {video_path} reported {frame_count} frames. Treating as invalid for episode processing.", file=sys.stderr)
+        return original_fps, 0, original_width, original_height
+
+    # For videos with valid frame_count, ensure other critical metadata is also valid (positive)
+    # If not, set them to None, as they cannot be used for dataset-wide metadata.
+    if original_fps <= 0:
+        print(f"Warning: Video {video_path} reported FPS {original_fps}. Treating as invalid.", file=sys.stderr)
+        fps = None
+    if original_width <= 0:
+        print(f"Warning: Video {video_path} reported width {original_width}. Treating as invalid.", file=sys.stderr)
+        width = None
+    if original_height <= 0:
+        print(f"Warning: Video {video_path} reported height {original_height}. Treating as invalid.", file=sys.stderr)
+        height = None
     
     return fps, frame_count, width, height
 
 def generate_metadata_script(
     dataset_root_path: Path,
     output_meta_dir_path: Path,
-    codebase_version: str,
-    robot_type: str,
-    task_description: str,
-    total_tasks_in_dataset: int,
+    codebase_version_const: str,
+    robot_type_const: str,
+    task_description_from_file: str,
+    total_tasks_from_file: int,
     data_path_template_str: str,
     video_path_template_str: str,
     video_key: str,
     chunk_size_val: int,
-    fps_override_val: float | None,
-    splits_definition_dict: dict,
     features_schema_dict: dict
 ):
     """
@@ -61,129 +71,88 @@ def generate_metadata_script(
 
     episodes_data = []
     total_frames_sum = 0
-    
-    detected_fps_vals = []
-    detected_heights = []
-    detected_widths = []
 
-    # Discover episodes: DATASET_ROOT/videos/chunk-*/observation.images.{video_key}/episode_*.mp4
-    video_files_glob_pattern = str(dataset_root_path / "videos" / "chunk-*" / f"observation.images.{video_key}" / "episode_*.mp4")
+    # Discover episodes: DATASET_ROOT/videos/chunk-*/{video_key}/episode_*.mp4
+    video_files_glob_pattern = str(dataset_root_path / "videos" / "chunk-*" / video_key / "episode_*.mp4")
     discovered_video_files = sorted(glob.glob(video_files_glob_pattern))
 
     if not discovered_video_files:
         print(f"Error: No video files found matching pattern: {video_files_glob_pattern}", file=sys.stderr)
         print("Please ensure your dataset has videos in the expected structure, e.g.,", file=sys.stderr)
-        print(f"{dataset_root_path}/videos/chunk-000/observation.images.{video_key}/episode_000000.mp4", file=sys.stderr)
+        print(f"{dataset_root_path}/videos/chunk-000/{video_key}/episode_000000.mp4", file=sys.stderr)
         return False
 
     print(f"Found {len(discovered_video_files)} potential video files.")
 
     processed_episode_count = 0
+    current_fps = current_frame_count = current_width = current_height = None  # Ensure variables are defined
     for video_file_path_str in discovered_video_files:
         video_file_path = Path(video_file_path_str)
-        episode_idx = processed_episode_count 
-
-        fps, frame_count, width, height = get_video_metadata(video_file_path)
-
-        if frame_count is None or frame_count <= 0:
-            print(f"Skipping episode (would-be index {episode_idx}) due to video error or zero/invalid frames: {video_file_path}", file=sys.stderr)
-            continue 
-
-        if fps is not None and fps > 0: detected_fps_vals.append(fps)
-        if height is not None and height > 0: detected_heights.append(height)
-        if width is not None and width > 0: detected_widths.append(width)
         
+        # Get metadata for the current video
+        current_fps, current_frame_count, current_width, current_height = get_video_metadata(video_file_path)
+
+        if current_frame_count is None or current_frame_count <= 0:
+            print(f"Terminated due to error or zero/invalid frames: {video_file_path}", file=sys.stderr)
+            return False
+        # If this is the first valid video, set and validate the dataset-wide metadata
+        if current_fps is None or current_height is None or current_width is None:
+            print(f"Error: Invalid FPS/height/width obtained from video: {video_file_path}. Cannot proceed.", file=sys.stderr)
+            return False
+        
+        print(f"Using metadata from video ({video_file_path}): FPS={current_fps}, Height={current_height}, Width={current_width}")
+
+        episode_idx = processed_episode_count
         episodes_data.append({
             "episode_index": episode_idx,
-            "task": task_description,
-            "length": frame_count
+            "task": task_description_from_file,
+            "length": current_frame_count
         })
-        total_frames_sum += frame_count
+        total_frames_sum += current_frame_count
         processed_episode_count += 1
-    
-    if not episodes_data:
-        print("Error: No valid episodes processed. Cannot generate metadata files.", file=sys.stderr)
-        return False
-        
-    total_episodes = len(episodes_data)
-    print(f"Successfully processed {total_episodes} episodes.")
-
+            
     # Write episodes.jsonl
+    total_episodes = len(episodes_data)
     episodes_jsonl_path = output_meta_dir_path / "episodes.jsonl"
     with open(episodes_jsonl_path, 'w') as f:
         for episode_info in episodes_data:
             f.write(json.dumps(episode_info) + '\n')
-    print(f"Generated {episodes_jsonl_path}")
+    print(f"Successfully processed {total_episodes} episodes, and generated {episodes_jsonl_path}")
 
-    # Determine final FPS, height, width for info.json
-    final_fps = fps_override_val
-    if final_fps is None:
-        if detected_fps_vals:
-            unique_fps = sorted(list(set(round(f, 2) for f in detected_fps_vals)))
-            if len(unique_fps) > 1:
-                print(f"Warning: Multiple FPS values detected: {unique_fps}. Using the first one: {unique_fps[0]}", file=sys.stderr)
-            final_fps = unique_fps[0]
-        else:
-            final_fps = 30.0 
-            print(f"Warning: No FPS detected from videos and no override. Defaulting to {final_fps} FPS.", file=sys.stderr)
-    
-    final_video_height = None
-    if detected_heights:
-        unique_heights = sorted(list(set(detected_heights)))
-        if len(unique_heights) > 1:
-            print(f"Warning: Multiple video heights detected: {unique_heights}. Using the first one: {unique_heights[0]}", file=sys.stderr)
-        final_video_height = unique_heights[0]
-    else:
-        final_video_height = 480 
-        print(f"Warning: No video height detected. Defaulting to {final_video_height}.", file=sys.stderr)
 
-    final_video_width = None
-    if detected_widths:
-        unique_widths = sorted(list(set(detected_widths)))
-        if len(unique_widths) > 1:
-            print(f"Warning: Multiple video widths detected: {unique_widths}. Using the first one: {unique_widths[0]}", file=sys.stderr)
-        final_video_width = unique_widths[0]
-    else:
-        final_video_width = 640
-        print(f"Warning: No video width detected. Defaulting to {final_video_width}.", file=sys.stderr)
-
+    # info.json generation
     total_chunks = math.ceil(total_episodes / chunk_size_val) if chunk_size_val > 0 else 1
 
-    final_splits = {}
-    if splits_definition_dict:
-        for split_name, split_range in splits_definition_dict.items():
-            final_splits[split_name] = split_range.replace("N", str(total_episodes))
-    else:
-        final_splits["train"] = f"0:{total_episodes}"
+    # Simplified splits: all data for training
+    final_splits = {"train": f"0:{total_episodes}"}
 
     current_features_schema = json.loads(json.dumps(features_schema_dict)) 
-    
-    image_feature_key = f"observation.images.{video_key}"
-    if image_feature_key in current_features_schema:
+    image_feature_key = "observation.images.camera" # Hardcoded schema key
+    if image_feature_key in current_features_schema and current_height is not None and current_width is not None and current_fps is not None:
         current_features_schema[image_feature_key]["shape"] = [
             current_features_schema[image_feature_key]["shape"][0], 
-            final_video_height,
-            final_video_width
+            current_height,
+            current_width
         ]
-        current_features_schema[image_feature_key]["info"]["video.fps"] = float(final_fps)
-        current_features_schema[image_feature_key]["info"]["video.height"] = final_video_height
-        current_features_schema[image_feature_key]["info"]["video.width"] = final_video_width
+        current_features_schema[image_feature_key]["info"]["video.fps"] = float(current_fps)
+        current_features_schema[image_feature_key]["info"]["video.height"] = current_height
+        current_features_schema[image_feature_key]["info"]["video.width"] = current_width
     else:
-        print(f"Warning: Image feature key '{image_feature_key}' not found in features schema. Video metadata in info.json might be incomplete.", file=sys.stderr)
+        print(f"Warning: Image feature key '{image_feature_key}' not found in features schema or video metadata is incomplete. Video metadata in info.json might be incomplete.", file=sys.stderr)
 
     info_content = {
-        "codebase_version": codebase_version,
-        "robot_type": robot_type,
+        "codebase_version": codebase_version_const,
+        "robot_type": robot_type_const,
         "total_episodes": total_episodes,
-        "total_frames": total_frames_sum,
-        "total_tasks": total_tasks_in_dataset,
+        "total_frames": int(total_frames_sum),
+        "total_tasks": total_tasks_from_file,
         "total_videos": total_episodes,
         "total_chunks": total_chunks,
         "chunks_size": chunk_size_val,
-        "fps": float(final_fps), 
+        "fps": float(current_fps) if current_fps is not None else 0.0, 
         "splits": final_splits,
         "data_path": data_path_template_str,
-        "video_path": video_path_template_str.replace("{video_key}", video_key),
+        "video_path": video_path_template_str.replace("{video_key_folder_name}", video_key), # Use the placeholder from the template
         "features": current_features_schema
     }
 
@@ -193,7 +162,51 @@ def generate_metadata_script(
     print(f"Generated {info_json_path}")
     return True
 
+def load_tasks_jsonl(tasks_jsonl_path: Path) -> tuple[str | None, int | None]:
+    """Loads task description and count from tasks.jsonl."""
+    default_task_desc = "pick and sort a red or blue can" # Fallback if "task" key is missing
+    if not tasks_jsonl_path.is_file():
+        print(f"Error: Tasks file '{tasks_jsonl_path}' not found.", file=sys.stderr)
+        print("Please create this file with each line as a JSON object, e.g.: {\"task_index\": 0, \"task\": \"pick and sort a red or blue can\"}", file=sys.stderr)
+        return None, None
+
+    tasks_data_list = []
+    try:
+        with open(tasks_jsonl_path, 'r') as f_tasks:
+            for line_idx, line in enumerate(f_tasks):
+                line_content = line.strip()
+                if line_content:
+                    try:
+                        tasks_data_list.append(json.loads(line_content))
+                    except json.JSONDecodeError as e:
+                        print(f"Warning: Could not decode JSON from {tasks_jsonl_path} line {line_idx + 1}: '{line_content}' - {e}", file=sys.stderr)
+        
+        if not tasks_data_list:
+            print(f"Error: {tasks_jsonl_path} is empty or contains no valid JSON. Cannot determine task description or count.", file=sys.stderr)
+            return None, None
+        
+        task_description = tasks_data_list[0].get("task", default_task_desc)
+        num_tasks = len(tasks_data_list)
+        print(f"Loaded {num_tasks} task(s) from {tasks_jsonl_path}.")
+        print(f"Using task description for episodes: '{task_description}' (from first task entry)")
+        return task_description, num_tasks
+    except Exception as e:
+        print(f"Error reading or processing {tasks_jsonl_path}: {e}", file=sys.stderr)
+        return None, None
+
 def main():
+    DEFAULT_CODEBASE_VERSION = "v2.0"
+    DEFAULT_ROBOT_TYPE = "Unitree_G1"
+    DEFAULT_JOINT_NAMES = [
+        "kLeftShoulderPitch", "kLeftShoulderRoll", "kLeftShoulderYaw", "kLeftElbow",
+        "kLeftWristRoll", "kLeftWristPitch", "kLeftWristYaw",
+        "kRightShoulderPitch", "kRightShoulderRoll", "kRightShoulderYaw", "kRightElbow",
+        "kRightWristRoll", "kRightWristPitch", "kRightWristYaw",
+        "kLeftHandThumb0", "kLeftHandThumb1", "kLeftHandThumb2",
+        "kLeftHandMiddle0", "kLeftHandMiddle1", "kLeftHandIndex0", "kLeftHandIndex1",
+        "kRightHandThumb0", "kRightHandThumb1", "kRightHandThumb2",
+        "kRightHandIndex0", "kRightHandIndex1", "kRightHandMiddle0", "kRightHandMiddle1"
+    ]
     parser = argparse.ArgumentParser(
         description="Generate metadata files (info.json, episodes.jsonl) for a robot dataset. \n"
                     "The script expects video files to be structured as: \n"
@@ -201,69 +214,35 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("dataset_root", type=str, help="Path to the root directory of the dataset (Required).")
-    
-    parser.add_argument("--codebase_version", type=str, default="v2.0", help="Codebase version (default: v2.0).")
-    parser.add_argument("--robot_type", type=str, default="Unitree_G1", help="Robot type (default: Unitree_G1).")
-    parser.add_argument("--task_description", type=str, default="pick and sort a red or blue can",
-                        help="Task description for episodes.jsonl (default: 'pick and sort a red or blue can').")
-    parser.add_argument("--total_tasks", type=int, default=1,
-                        help="Total number of unique tasks in the dataset (default: 1).")
-    
     parser.add_argument("--data_path_template", type=str, 
                         default="data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet",
                         help="Template for data file paths.")
-    parser.add_argument("--video_key", type=str, default="camera", 
-                        help="The '{video_key}' part in video_path_template (e.g., 'camera') (default: 'camera').")
+    parser.add_argument("--video_key", type=str, default="observation.images.camera",
+                        help="The name of the folder under 'videos/chunk-*/' that contains episode videos (e.g., 'observation.images.camera', 'front_cam'). This value will replace '{video_key_folder_name}' in the video_path_template. (default: 'observation.images.camera').")
     parser.add_argument("--video_path_template", type=str,
-                        default="videos/chunk-{episode_chunk:03d}/observation.images.{video_key}/episode_{episode_index:06d}.mp4",
-                        help="Template for video file paths.")
-    
-    parser.add_argument("--chunk_size", type=int, default=1000, 
+                        default="videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4",
+                        help="Template for video file paths. '{video_key}' will be replaced by the value of --video_key.")
+    parser.add_argument("--chunk_size", type=int, default=1000,
                         help="Number of episodes per chunk (default: 1000).")
-    parser.add_argument("--fps_override", type=float, default=None, 
-                        help="Override FPS (e.g., 30.0). If None (default), detects from video.")
-    
-    parser.add_argument("--splits_json", type=str, default='{"train": "0:N"}',
-                        help="JSON string defining dataset splits. 'N' is replaced by total episodes. \n"
-                             "(default: '{\"train\": \"0:N\"}')")
-    
-    parser.add_argument("--joint_names_json", type=str, default=None,
-                        help="JSON string of a list of joint names. If None, uses a default list. \n"
-                             "Example: '[\"joint1\", \"joint2\"]'")
 
     args = parser.parse_args()
-
     dataset_root_p = Path(args.dataset_root)
     output_meta_dir_p = dataset_root_p / "meta"
 
-    if args.joint_names_json:
-        try:
-            joint_names = json.loads(args.joint_names_json)
-            if not isinstance(joint_names, list) or not all(isinstance(j, str) for j in joint_names):
-                raise ValueError("Joint names must be a list of strings.")
-        except (json.JSONDecodeError, ValueError) as e:
-            print(f"Error: Invalid JSON for --joint_names_json: {e}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        joint_names = [
-            "kLeftShoulderPitch", "kLeftShoulderRoll", "kLeftShoulderYaw", "kLeftElbow",
-            "kLeftWristRoll", "kLeftWristPitch", "kLeftWristYaw",
-            "kRightShoulderPitch", "kRightShoulderRoll", "kRightShoulderYaw", "kRightElbow",
-            "kRightWristRoll", "kRightWristPitch", "kRightWristYaw",
-            "kLeftHandThumb0", "kLeftHandThumb1", "kLeftHandThumb2",
-            "kLeftHandMiddle0", "kLeftHandMiddle1", "kLeftHandIndex0", "kLeftHandIndex1",
-            "kRightHandThumb0", "kRightHandThumb1", "kRightHandThumb2",
-            "kRightHandIndex0", "kRightHandIndex1", "kRightHandMiddle0", "kRightHandMiddle1"
-        ]
-    
+    # Read task description and total tasks from meta/tasks.jsonl
+    tasks_jsonl_path = output_meta_dir_p / "tasks.jsonl"
+    task_description_for_script, num_tasks_for_script = load_tasks_jsonl(tasks_jsonl_path)
+    if task_description_for_script is None or num_tasks_for_script is None:
+        sys.exit(1)
+
     features_schema = {
         "observation.state": {
-            "dtype": "float32", "shape": [len(joint_names)], "names": [joint_names]
+            "dtype": "float32", "shape": [len(DEFAULT_JOINT_NAMES)], "names": [DEFAULT_JOINT_NAMES]
         },
         "action": {
-            "dtype": "float32", "shape": [len(joint_names)], "names": [joint_names]
+            "dtype": "float32", "shape": [len(DEFAULT_JOINT_NAMES)], "names": [DEFAULT_JOINT_NAMES]
         },
-        f"observation.images.{args.video_key}": {
+        "observation.images.camera": { # Hardcoded schema key
             "dtype": "video",
             "shape": [3, None, None], # H, W auto-filled
             "names": ["channels", "height", "width"],
@@ -285,26 +264,17 @@ def main():
         "task_index": {"dtype": "int64", "shape": [1], "names": None} 
     }
 
-    try:
-        splits_dict = json.loads(args.splits_json)
-    except json.JSONDecodeError:
-        print(f"Error: Invalid JSON string for --splits_json: {args.splits_json}", file=sys.stderr)
-        print("Using default split: {'train': '0:N'}", file=sys.stderr)
-        splits_dict = {"train": "0:N"}
-
     success = generate_metadata_script(
         dataset_root_path=dataset_root_p,
         output_meta_dir_path=output_meta_dir_p,
-        codebase_version=args.codebase_version,
-        robot_type=args.robot_type,
-        task_description=args.task_description,
-        total_tasks_in_dataset=args.total_tasks,
+        codebase_version_const=DEFAULT_CODEBASE_VERSION,
+        robot_type_const=DEFAULT_ROBOT_TYPE,
+        task_description_from_file=task_description_for_script,
+        total_tasks_from_file=num_tasks_for_script,
         data_path_template_str=args.data_path_template,
         video_path_template_str=args.video_path_template,
         video_key=args.video_key,
         chunk_size_val=args.chunk_size,
-        fps_override_val=args.fps_override,
-        splits_definition_dict=splits_dict,
         features_schema_dict=features_schema
     )
     
@@ -313,5 +283,5 @@ def main():
 
 if __name__ == "__main__":
     # Usage example:
-    # ./generate_dataset_meta.py /home/asus/Gits/IsaacLab-GR00T/Isaac-GR00T/demo_data/G1_CanSort_Dataset
+    # python scripts/generate_dataset_meta.py demo_data/G1_CanSorting_Dataset/
     main()
