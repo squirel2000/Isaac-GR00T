@@ -82,8 +82,6 @@ def generate_metadata_script(
         print(f"{dataset_root_path}/videos/chunk-000/{video_key}/episode_000000.mp4", file=sys.stderr)
         return False
 
-    print(f"Found {len(discovered_video_files)} potential video files.")
-
     processed_episode_count = 0
     current_fps = current_frame_count = current_width = current_height = None  # Ensure variables are defined
     for video_file_path_str in discovered_video_files:
@@ -99,8 +97,6 @@ def generate_metadata_script(
         if current_fps is None or current_height is None or current_width is None:
             print(f"Error: Invalid FPS/height/width obtained from video: {video_file_path}. Cannot proceed.", file=sys.stderr)
             return False
-        
-        print(f"Using metadata from video ({video_file_path}): FPS={current_fps}, Height={current_height}, Width={current_width}")
 
         episode_idx = processed_episode_count
         episodes_data.append({
@@ -110,15 +106,16 @@ def generate_metadata_script(
         })
         total_frames_sum += current_frame_count
         processed_episode_count += 1
-            
-    # Write episodes.jsonl
+    
     total_episodes = len(episodes_data)
+    print(f"Successfully processed {total_episodes} episodes with FPS={current_fps}, Height={current_height}, Width={current_width}\n")
+    
+    # Write episodes.jsonl
     episodes_jsonl_path = output_meta_dir_path / "episodes.jsonl"
     with open(episodes_jsonl_path, 'w') as f:
         for episode_info in episodes_data:
             f.write(json.dumps(episode_info) + '\n')
-    print(f"Successfully processed {total_episodes} episodes, and generated {episodes_jsonl_path}")
-
+    print(f"Generated {episodes_jsonl_path}")
 
     # info.json generation
     total_chunks = math.ceil(total_episodes / chunk_size_val) if chunk_size_val > 0 else 1
@@ -152,7 +149,7 @@ def generate_metadata_script(
         "fps": float(current_fps) if current_fps is not None else 0.0, 
         "splits": final_splits,
         "data_path": data_path_template_str,
-        "video_path": video_path_template_str.replace("{video_key_folder_name}", video_key), # Use the placeholder from the template
+        "video_path": video_path_template_str, # The template is now fully qualified
         "features": current_features_schema
     }
 
@@ -188,7 +185,7 @@ def load_tasks_jsonl(tasks_jsonl_path: Path) -> tuple[str | None, int | None]:
         task_description = tasks_data_list[0].get("task", default_task_desc)
         num_tasks = len(tasks_data_list)
         print(f"Loaded {num_tasks} task(s) from {tasks_jsonl_path}.")
-        print(f"Using task description for episodes: '{task_description}' (from first task entry)")
+        print(f"Using task description for episodes: '{task_description}'\n")
         return task_description, num_tasks
     except Exception as e:
         print(f"Error reading or processing {tasks_jsonl_path}: {e}", file=sys.stderr)
@@ -197,6 +194,10 @@ def load_tasks_jsonl(tasks_jsonl_path: Path) -> tuple[str | None, int | None]:
 def main():
     DEFAULT_CODEBASE_VERSION = "v2.0"
     DEFAULT_ROBOT_TYPE = "Unitree_G1"
+    DEFAULT_DATA_PATH_TEMPLATE = "data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet"
+    DEFAULT_VIDEO_KEY = "observation.images.camera"
+    DEFAULT_VIDEO_PATH_TEMPLATE = "videos/chunk-{episode_chunk:03d}/observation.images.camera/episode_{episode_index:06d}.mp4"
+
     DEFAULT_JOINT_NAMES = [
         "kLeftShoulderPitch", "kLeftShoulderRoll", "kLeftShoulderYaw", "kLeftElbow",
         "kLeftWristRoll", "kLeftWristPitch", "kLeftWristYaw",
@@ -214,14 +215,6 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("dataset_root", type=str, help="Path to the root directory of the dataset (Required).")
-    parser.add_argument("--data_path_template", type=str, 
-                        default="data/chunk-{episode_chunk:03d}/episode_{episode_index:06d}.parquet",
-                        help="Template for data file paths.")
-    parser.add_argument("--video_key", type=str, default="observation.images.camera",
-                        help="The name of the folder under 'videos/chunk-*/' that contains episode videos (e.g., 'observation.images.camera', 'front_cam'). This value will replace '{video_key_folder_name}' in the video_path_template. (default: 'observation.images.camera').")
-    parser.add_argument("--video_path_template", type=str,
-                        default="videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4",
-                        help="Template for video file paths. '{video_key}' will be replaced by the value of --video_key.")
     parser.add_argument("--chunk_size", type=int, default=1000,
                         help="Number of episodes per chunk (default: 1000).")
 
@@ -271,9 +264,9 @@ def main():
         robot_type_const=DEFAULT_ROBOT_TYPE,
         task_description_from_file=task_description_for_script,
         total_tasks_from_file=num_tasks_for_script,
-        data_path_template_str=args.data_path_template,
-        video_path_template_str=args.video_path_template,
-        video_key=args.video_key,
+        data_path_template_str=DEFAULT_DATA_PATH_TEMPLATE,
+        video_path_template_str=DEFAULT_VIDEO_PATH_TEMPLATE,
+        video_key=DEFAULT_VIDEO_KEY,
         chunk_size_val=args.chunk_size,
         features_schema_dict=features_schema
     )
@@ -283,5 +276,5 @@ def main():
 
 if __name__ == "__main__":
     # Usage example:
-    # python scripts/generate_dataset_meta.py demo_data/G1_CanSorting_Dataset/
+    # python scripts/generate_dataset_meta.py demo_data/G1_CanSorting_Dataset
     main()

@@ -36,22 +36,22 @@ from gr00t.utils.peft import get_lora_model
 # =====================
 G1_DATASET_PATH = "demo_data/G1_CanSorting_Dataset"
 G1_OUTPUT_DIR = "output/G1_CanSorting_Dataset/"
-G1_DATA_CONFIG = "g1_cube_pick_and_place"
+G1_DATA_CONFIG = "g1_can_pick_and_sort"
 
 
 @dataclass
 class Config:
-    """Configuration for GR00T model fine-tuning on G1 Cube Picking-and-Placement Dataset."""
+    """Configuration for GR00T model fine-tuning on G1 Can Picking-and-Sorting Dataset."""
 
     # Dataset parameters
     dataset_path: str = G1_DATASET_PATH
-    """Path to the G1 Cube Picking-and-Placement Dataset directory."""
+    """Path to the G1 Can Picking-and-Sorting Dataset directory."""
 
     output_dir: str = G1_OUTPUT_DIR
     """Directory to save G1 model checkpoints."""
 
     data_config: str = G1_DATA_CONFIG
-    """Data configuration name for G1 Cube Picking-and-Placement from DATA_CONFIG_MAP."""
+    """Data configuration name for G1 Can Picking-and-Sorting from DATA_CONFIG_MAP."""
 
     # Training parameters
     batch_size: int = 1
@@ -95,7 +95,7 @@ class Config:
     warmup_ratio: float = 0.05
     """Ratio of total training steps used for warmup."""
 
-    lora_rank: int = 8
+    lora_rank: int = 4
     """Rank for the LORA model."""
 
     lora_alpha: int = 16
