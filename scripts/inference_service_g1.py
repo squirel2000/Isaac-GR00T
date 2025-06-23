@@ -21,13 +21,19 @@ from gr00t.eval.robot import RobotInferenceClient, RobotInferenceServer
 from gr00t.experiment.data_config import DATA_CONFIG_MAP
 from gr00t.model.policy import Gr00tPolicy
 
+# =====================
+# Dataset Constants
+# =====================
+G1_CHECKPOINTS_DIR = "output/G1_CubeStacking_Dataset_Checkpoints_fft_bs16/"
+G1_DATA_CONFIG = "g1_can_pick_and_sort" # Data config for G1 "Can Picking-and-Sorting" / "Cube Stacking" Dataset
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_path",
         type=str,
         help="Path to the model checkpoint directory. For G1 CanSorting dataset (pick and sort a can), this might be 'output/G1_CanSorting_Dataset/' or a base model like 'nvidia/GR00T-N1-2B'.",
-        default="output/G1_CanSorting_Dataset/", # Adjusted for G1 CanSorting_Dataset (pick and sort a can)
+        default=G1_CHECKPOINTS_DIR,
     )
     parser.add_argument(
         "--embodiment_tag",
@@ -40,13 +46,11 @@ if __name__ == "__main__":
         type=str,
         help="The name of the data config to use.",
         choices=list(DATA_CONFIG_MAP.keys()),
-        default="g1_can_pick_and_sort", # Adjusted for G1 CanSorting_Dataset (pick and place cube)
+        default=G1_DATA_CONFIG
     )
 
     parser.add_argument("--port", type=int, help="Port number for the server.", default=5555)
-    parser.add_argument(
-        "--host", type=str, help="Host address for the server.", default="localhost"
-    )
+    parser.add_argument("--host", type=str, help="Host address for the server.", default="localhost")
     # server mode
     parser.add_argument("--server", action="store_true", help="Run the server.")
     # client mode

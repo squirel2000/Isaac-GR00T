@@ -9,6 +9,30 @@ from pathlib import Path
 import argparse
 import sys
 
+#####
+# This script generates metadata files (info.json, episodes.jsonl) for a robot dataset.
+#
+# It expects video files to be structured as:
+# <dataset_root>/videos/chunk-<CHUNK_ID>/observation.images.<video_key>/episode-<EPISODE_ID>.mp4
+# The script extracts metadata from these videos and generates the necessary JSON files.
+# It also reads task descriptions from a tasks.jsonl file located in the meta directory of the dataset.
+#
+# The generated info.json contains dataset-wide metadata, while episodes.jsonl contains per-episode information
+# such as episode index, task description, and length (number of frames).
+# The script is designed to be run from the command line with the dataset root path as an argument.
+# It also allows specifying the number of episodes per chunk via a command line argument.
+#
+# Before running the script, ensure that the dataset directory structure is correct and 
+# that the modality.json and tasks.jsonl files exist in the meta directory.
+#
+# Usage:
+# python scripts/generate_dataset_meta.py <dataset_root> [--chunk_size <chunk_size>]
+#
+# Example:
+# python scripts/generate_dataset_meta.py demo_data/G1_CubeStacking_Dataset --chunk_size 1000
+# The script will create info.json and episodes.jsonl files in the meta directory in the dataset root.
+
+
 def get_video_metadata(video_path: Path):
     """
     Extracts metadata (fps, frame_count, width, height) from a video file.
@@ -275,6 +299,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    # Usage example:
-    # python scripts/generate_dataset_meta.py demo_data/G1_CanSorting_Dataset
     main()

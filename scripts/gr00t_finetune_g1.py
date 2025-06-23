@@ -34,9 +34,9 @@ from gr00t.utils.peft import get_lora_model
 # =====================
 # Dataset Constants
 # =====================
-G1_DATASET_PATH = "demo_data/G1_CanSorting_Dataset"
-G1_OUTPUT_DIR = "output/G1_CanSorting_Dataset/"
-G1_DATA_CONFIG = "g1_can_pick_and_sort"
+G1_DATASET_PATH = "demo_data/G1_CubeStacking_Dataset"
+G1_OUTPUT_DIR = "output/G1_CubeStacking_Dataset_Checkpoints_fft_bs16/"
+G1_DATA_CONFIG = "g1_can_pick_and_sort" # Data config for G1 "Can Picking-and-Sorting" / "Cube Stacking" Dataset
 
 
 @dataclass
@@ -54,16 +54,16 @@ class Config:
     """Data configuration name for G1 Can Picking-and-Sorting from DATA_CONFIG_MAP."""
 
     # Training parameters
-    batch_size: int = 1
+    batch_size: int = 16
     """Batch size per GPU for training (adjusted for G1 dataset)."""
 
-    max_steps: int = 200000
-    """Maximum number of training steps (aligned with G1 10k finetuning results)."""
+    max_steps: int = 100000
+    """Maximum number of training steps (aligned with G1 100k finetuning results)."""
 
     num_gpus: int = 1
     """Number of GPUs to use for training."""
 
-    save_steps: int = 500
+    save_steps: int = 5000
     """Number of steps between saving checkpoints."""
 
     # Model parameters
@@ -95,10 +95,10 @@ class Config:
     warmup_ratio: float = 0.05
     """Ratio of total training steps used for warmup."""
 
-    lora_rank: int = 32
+    lora_rank: int = 0
     """Rank for the LORA model."""
 
-    lora_alpha: int = 64
+    lora_alpha: int = 16
     """Alpha value for the LORA model."""
 
     lora_dropout: float = 0.1
@@ -190,7 +190,7 @@ def main(config: Config):
         max_steps=config.max_steps,
         save_strategy="steps",
         save_steps=config.save_steps,
-        evaluation_strategy="no",
+        # evaluation_strategy="no",
         save_total_limit=8,
         report_to=config.report_to,
         seed=42,
