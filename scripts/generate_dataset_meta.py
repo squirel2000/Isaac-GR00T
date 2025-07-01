@@ -26,10 +26,10 @@ import sys
 # that the modality.json and tasks.jsonl files exist in the meta directory.
 #
 # Usage:
-# python scripts/generate_dataset_meta.py <dataset_root> [--chunk_size <chunk_size>]
+# python scripts/generate_dataset_meta.py <dataset_root>
 #
 # Example:
-# python scripts/generate_dataset_meta.py demo_data/G1_CubeStacking_Dataset --chunk_size 1000
+# python scripts/generate_dataset_meta.py demo_data/G1_CubeStacking_Dataset
 # The script will create info.json and episodes.jsonl files in the meta directory in the dataset root.
 
 
@@ -239,12 +239,24 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("dataset_root", type=str, help="Path to the root directory of the dataset (Required).")
-    parser.add_argument("--chunk_size", type=int, default=1000,
-                        help="Number of episodes per chunk (default: 1000).")
 
     args = parser.parse_args()
     dataset_root_p = Path(args.dataset_root)
     output_meta_dir_p = dataset_root_p / "meta"
+
+    # Automatically determine chunk size by counting files in the first chunk directory
+    first_chunk_video_dir = dataset_root_p / "videos" / "chunk-000" / DEFAULT_VIDEO_KEY
+    if not first_chunk_video_dir.is_dir():
+        print(f"Error: The first chunk directory was not found at: {first_chunk_video_dir}", file=sys.stderr)
+        print("Please ensure your dataset has a 'chunk-000' directory with videos.", file=sys.stderr)
+        sys.exit(1)
+    chunk_size_val = len(glob.glob(str(first_chunk_video_dir / "episode_*.mp4")))
+
+    if chunk_size_val == 0:
+        print(f"Error: No video files found in the first chunk directory: {first_chunk_video_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Detected {chunk_size_val} episodes in the first chunk. Using this as the chunk_size.")
 
     # Read task description and total tasks from meta/tasks.jsonl
     tasks_jsonl_path = output_meta_dir_p / "tasks.jsonl"
@@ -291,7 +303,7 @@ def main():
         data_path_template_str=DEFAULT_DATA_PATH_TEMPLATE,
         video_path_template_str=DEFAULT_VIDEO_PATH_TEMPLATE,
         video_key=DEFAULT_VIDEO_KEY,
-        chunk_size_val=args.chunk_size,
+        chunk_size_val=chunk_size_val,
         features_schema_dict=features_schema
     )
     
