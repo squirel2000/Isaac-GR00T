@@ -16,7 +16,7 @@
 import os
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Literal
 
@@ -36,8 +36,8 @@ from gr00t.utils.peft import get_lora_model
 # =====================
 # Dataset Constants
 # =====================
-G1_DATASET_PATH = ["demo_data/G1_CubeStacking_Dataset"] # Changed to List[str]
-G1_OUTPUT_DIR = "output/G1_CubeStacking_Dataset_Checkpoints_fft_bs16/"
+G1_DATASET_PATH = ["demo_data/G1_Cabinet_Pour_Dataset"] # Changed to List[str]
+G1_OUTPUT_DIR = "output/G1_Cabinet_Pour_Dataset_Checkpoints_fft_bs16/"
 G1_DATA_CONFIG = "g1_can_pick_and_sort" # Data config for G1 "Can Picking-and-Sorting" / "Cube Stacking" Dataset
 
 
@@ -46,7 +46,7 @@ class ArgsConfig:
     """Configuration for GR00T model fine-tuning on G1 Can Picking-and-Sorting Dataset."""
 
     # Dataset parameters # Changed type to List[str]
-    dataset_path: List[str] = G1_DATASET_PATH
+    dataset_path: List[str] = field(default_factory=lambda: G1_DATASET_PATH)
     """Path to the G1 Can Picking-and-Sorting Dataset directory."""
 
     output_dir: str = G1_OUTPUT_DIR
@@ -56,10 +56,10 @@ class ArgsConfig:
     """Data configuration name for G1 Can Picking-and-Sorting from DATA_CONFIG_MAP."""
 
     # Training parameters
-    batch_size: int = 32
+    batch_size: int = 4
     """Batch size per GPU for training (adjusted for G1 dataset)."""
 
-    max_steps: int = 100000
+    max_steps: int = 10000
     """Maximum number of training steps (aligned with G1 100k finetuning results)."""
 
     num_gpus: int = 1
@@ -69,7 +69,7 @@ class ArgsConfig:
     """Number of steps between saving checkpoints."""
 
     # Model parameters
-    base_model_path: str = "nvidia/GR00T-N1-2B"
+    base_model_path: str = "nvidia/GR00T-N1.5-3B"
     """Path or HuggingFace model ID for the base model."""
 
     tune_llm: bool = False
@@ -97,7 +97,7 @@ class ArgsConfig:
     warmup_ratio: float = 0.05
     """Ratio of total training steps used for warmup."""
 
-    lora_rank: int = 0
+    lora_rank: int = 16
     """Rank for the LORA model."""
 
     lora_alpha: int = 16
@@ -146,14 +146,14 @@ def main(config: ArgsConfig):
     modality_configs = data_config_cls.modality_config()
     transforms = data_config_cls.transform()
 
-    # 1.2 data loader
-    train_dataset = LeRobotSingleDataset(
-        dataset_path=config.dataset_path,
-        modality_configs=modality_configs,
-        transforms=transforms,
-        embodiment_tag=embodiment_tag,
-        video_backend=config.video_backend,
-    )
+    # # 1.2 data loader
+    # train_dataset = LeRobotSingleDataset(
+    #     dataset_path=config.dataset_path,
+    #     modality_configs=modality_configs,
+    #     transforms=transforms,
+    #     embodiment_tag=embodiment_tag,
+    #     video_backend=config.video_backend,
+    # )
 
     # 1.2 data loader: we will use either single dataset or mixture dataset # Modified logic
     if len(config.dataset_path) == 1:
